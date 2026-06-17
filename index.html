@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptPay QR Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
+        body { 
+            background: #f1f5f9; 
+            font-family: 'Padauk', "Pyidaungsu", system-ui, -apple-system, sans-serif; 
+        }
+        .input-box, .select-box {
+            font-size: 1rem;
+            font-weight: bold;
+            color: #0f172a;
+            background: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 12px 14px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+        .input-box:focus, .select-box:focus {
+            outline: none;
+            border-color: #1d4ed8;
+            box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(to right, #1d4ed8, #2563eb);
+            color: white;
+            font-weight: bold;
+            padding: 12px;
+            border-radius: 12px;
+            width: 100%;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        .btn-secondary {
+            background: #ffffff;
+            color: #1e293b;
+            border: 2px solid #cbd5e1;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { background: #f8fafc; border-color: #94a3b8; }
+        .btn-secondary:active { transform: scale(0.98); }
+        
+        /* QR Slip Styling */
+        .slip-container {
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            width: 100%;
+            max-width: 380px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .slip-header {
+            background: #113566;
+            color: white;
+            text-align: center;
+            padding: 20px 15px;
+        }
+        .slip-body {
+            padding: 25px 20px;
+            text-align: center;
+            position: relative;
+        }
+        .qr-frame {
+            background: white;
+            padding: 15px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            display: inline-block;
+            margin-bottom: 20px;
+            border: 1px solid #f1f5f9;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col items-center min-h-screen">
+
+    <div class="w-full max-w-md">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-black text-slate-800">PromptPay QR ထုတ်ရန်</h1>
+            <p id="db-status" class="text-sm font-bold text-blue-500 mt-1">🔄 Database ချိတ်ဆက်နေပါသည်...</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6">
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-purple-700 mb-1">📂 Save ထားသော အကောင့်များ</label>
+                <select id="pp-select" class="select-box bg-purple-50 border-purple-200">
+                    <option value="">-- ရွေးချယ်ရန် --</option>
+                </select>
+            </div>
+            
+            <hr class="my-4 border-slate-200 border-dashed">
+
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-slate-700 mb-1">📱 PromptPay No. (ဖုန်း / ID)</label>
+                <input type="text" id="pp-id" class="input-box" placeholder="0812345678">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-slate-700 mb-1">👤 အကောင့်နာမည် (Option)</label>
+                <input type="text" id="pp-name" class="input-box" placeholder="ဥပမာ - YE LYNN HTUN">
+            </div>
+            <div class="mb-5">
+                <label class="block text-sm font-bold text-slate-700 mb-1">💰 ပမာဏ (THB)</label>
+                <input type="text" id="pp-amount" class="input-box text-xl" placeholder="ဥပမာ - 1,500" inputmode="decimal">
+            </div>
+            <button id="btn-generate" onclick="generateQR()" class="btn-primary text-lg">QR ထုတ်မည်</button>
+        </div>
+
+        <div id="result-area" class="hidden flex flex-col items-center">
+            <div id="slip-element" class="slip-container">
+                <div class="slip-header">
+                    <h2 class="text-2xl font-black tracking-wider">PromptPay</h2>
+                    <p class="text-blue-200 text-sm mt-1">Scan to Pay</p>
+                </div>
+                <div class="slip-body">
+                    <div class="absolute inset-0 flex justify-center items-center opacity-[0.03] pointer-events-none text-center leading-tight">
+                        <span class="text-3xl font-black transform -rotate-45">Thailand Guide<br>Supplier By Ye</span>
+                    </div>
+
+                    <div class="qr-frame relative z-10">
+                        <img id="qr-image" src="" alt="QR Code" class="w-48 h-48 object-contain">
+                    </div>
+                    
+                    <div class="relative z-10">
+                        <h3 id="display-name" class="text-xl font-black text-slate-800 uppercase tracking-wide"></h3>
+                        
+                        <div id="amt-box-wrapper" class="hidden mt-4 justify-center">
+                            <div style="background-color: #eff6ff; border: 2px solid #bfdbfe; border-radius: 12px; padding: 10px 20px; text-align: center; min-width: 200px;">
+                                <div style="font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; color: #2563eb; margin-bottom: 2px;">AMOUNT</div>
+                                <div id="display-amount-text" style="font-family: Arial, sans-serif; font-size: 24px; font-weight: bold; color: #1e3a8a; margin: 0; padding: 0;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-slate-50 border-t border-slate-100 p-3 text-center">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Thailand Guide - Supplier By Ye</p>
+                </div>
+            </div>
+
+            <div class="flex gap-3 w-full max-w-[380px] mt-5">
+                <button onclick="saveImage('png', this)" class="btn-secondary flex-1 flex items-center justify-center gap-2">
+                    <span>💾</span> PNG သိမ်းမည်
+                </button>
+                <button onclick="saveImage('jpg', this)" class="btn-secondary flex-1 flex items-center justify-center gap-2">
+                    <span>🖼️</span> JPG သိမ်းမည်
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = { 
+            apiKey: "AIzaSyDr4ada9hQah9C2ZX0xFBfxYDdXUQl3oa4", 
+            authDomain: "excal-570ed.firebaseapp.com", 
+            projectId: "excal-570ed", 
+            storageBucket: "excal-570ed.firebasestorage.app", 
+            messagingSenderId: "84544400626", 
+            appId: "1:84544400626:web:3393a4e339d3f41a60f46b", 
+            measurementId: "G-4KLYMEPPGT" 
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        // Local HTML file ကနေဖွင့်ရင် Connection ပြတ်မသွားအောင် ထည့်ပေးထားခြင်း
+        firebase.firestore().settings({ experimentalForceLongPolling: true });
+
+        let FIREBASE_QRS = [];
+        let isDbLoaded = false;
+
+        // ၃ စက္ကန့်အတွင်း DB မချိတ်နိုင်ရင် စောင့်စရာမလိုဘဲ ရိုက်ထည့်လို့ရကြောင်း ပြပေးမည်
+        setTimeout(() => {
+            if(!isDbLoaded) {
+                const statusEl = document.getElementById('db-status');
+                statusEl.textContent = '⚠️ အင်တာနက် သို့မဟုတ် Local File ကြောင့် နှေးနေပါသည် (အောက်တွင် ကိုယ်တိုင်ရိုက်ထည့်၍ ဆက်သုံးနိုင်ပါသည်)';
+                statusEl.classList.replace('text-blue-500', 'text-orange-500');
+            }
+        }, 3000);
+
+        // Load Data from Firebase
+        const dbRef = firebase.firestore().collection("exchange_app").doc("admin_data");
+        dbRef.get().then((docSnap) => {
+            isDbLoaded = true;
+            if (docSnap.exists) {
+                const data = docSnap.data();
+                FIREBASE_QRS = data.qrs || [];
+                populateDropdown();
+                const statusEl = document.getElementById('db-status');
+                statusEl.textContent = '✅ Database ချိတ်ဆက်ပြီးပါပြီ';
+                statusEl.classList.remove('text-blue-500', 'text-orange-500');
+                statusEl.classList.add('text-green-600');
+            } else {
+                const statusEl = document.getElementById('db-status');
+                statusEl.textContent = '⚠️ Data ရှာမတွေ့ပါ';
+                statusEl.classList.replace('text-blue-500', 'text-orange-500');
+            }
+        }).catch(err => {
+            isDbLoaded = true;
+            console.error(err);
+            const statusEl = document.getElementById('db-status');
+            statusEl.textContent = '❌ Connection Error (အင်တာနက် စစ်ဆေးပါ)';
+            statusEl.classList.remove('text-blue-500', 'text-orange-500');
+            statusEl.classList.add('text-red-500');
+        });
+
+        function populateDropdown() {
+            const select = document.getElementById('pp-select');
+            select.innerHTML = '<option value="">-- Save ထားသော အကောင့်ရွေးပါ --</option>';
+            
+            FIREBASE_QRS.forEach(qr => {
+                const file = typeof qr === 'string' ? qr : qr.file;
+                const name = typeof qr === 'string' ? qr.replace(/\.[^.]+$/, '') : (qr.name || file);
+                const owner = (typeof qr === 'object' && qr.owner) ? qr.owner : '';
+                
+                if (file.startsWith('PP:')) {
+                    const phone = file.split(':')[1];
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify({ phone: phone, name: owner || name });
+                    let displayName = owner ? `${name} (${owner})` : name;
+                    option.textContent = displayName;
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        document.getElementById('pp-select').addEventListener('change', function() {
+            if(!this.value) {
+                document.getElementById('pp-id').value = '';
+                document.getElementById('pp-name').value = '';
+                return;
+            }
+            const data = JSON.parse(this.value);
+            document.getElementById('pp-id').value = data.phone;
+            document.getElementById('pp-name').value = data.name;
+        });
+
+        const amtInput = document.getElementById('pp-amount');
+        amtInput.addEventListener('input', function(e) {
+            let value = this.value.replace(/[^\d.]/g, '');
+            const parts = value.split('.');
+            if (parts.length > 2) value = parts[0] + '.' + parts.slice(1).join('');
+            
+            if (value !== '') {
+                if (value.includes('.')) {
+                    this.value = (parts[0] ? Number(parts[0]).toLocaleString('en-US') : '0') + '.' + parts.slice(1).join('');
+                } else {
+                    this.value = Number(value).toLocaleString('en-US');
+                }
+            } else {
+                this.value = '';
+            }
+        });
+
+        async function generateQR() {
+            const ppId = document.getElementById('pp-id').value.trim();
+            const ppName = document.getElementById('pp-name').value.trim();
+            const rawAmt = document.getElementById('pp-amount').value.replace(/,/g, '');
+            
+            if (!ppId) {
+                alert('PromptPay ဖုန်းနံပါတ် သို့မဟုတ် ID ထည့်ပေးပါ။');
+                return;
+            }
+
+            const btn = document.getElementById('btn-generate');
+            const originalText = btn.textContent;
+            btn.textContent = 'ထုတ်လုပ်နေသည်...';
+            btn.disabled = true;
+
+            const amtNum = parseFloat(rawAmt);
+            const qrUrl = (amtNum > 0) ? `https://promptpay.io/${ppId}/${amtNum}.png` : `https://promptpay.io/${ppId}.png`;
+
+            document.getElementById('display-name').innerHTML = ppName || 'PROMPTPAY ACCOUNT';
+            
+            const amtWrapper = document.getElementById('amt-box-wrapper');
+            const amtText = document.getElementById('display-amount-text');
+            
+            if (amtNum > 0) {
+                amtText.innerText = amtNum.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' THB';
+                amtWrapper.classList.remove('hidden');
+                amtWrapper.classList.add('flex');
+            } else {
+                amtWrapper.classList.add('hidden');
+                amtWrapper.classList.remove('flex');
+                amtText.innerText = '';
+            }
+
+            try {
+                const proxyUrl = "https://wsrv.nl/?url=" + encodeURIComponent(qrUrl);
+                const response = await fetch(proxyUrl);
+                const blob = await response.blob();
+                const localUrl = URL.createObjectURL(blob);
+                
+                const qrImg = document.getElementById('qr-image');
+                qrImg.src = localUrl;
+                
+                qrImg.onload = () => {
+                    document.getElementById('result-area').classList.remove('hidden');
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                };
+            } catch (error) {
+                alert('QR ထုတ်ရာတွင် အခက်အခဲရှိပါသည်။ အင်တာနက်ချိတ်ဆက်မှုကို စစ်ဆေးပါ။');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function saveImage(format, btnEl) {
+            const slip = document.getElementById('slip-element');
+            const originalText = btnEl.innerHTML;
+            btnEl.innerHTML = '⏳ သိမ်းနေသည်...';
+            btnEl.disabled = true;
+
+            try {
+                await document.fonts?.ready;
+                await new Promise(r => setTimeout(r, 800));
+
+                const canvas = await html2canvas(slip, {
+                    scale: 3, 
+                    backgroundColor: '#ffffff',
+                    useCORS: true,
+                    logging: false,
+                    onclone: function (doc) {
+                        const amtWrapper = doc.getElementById('amt-box-wrapper');
+                        const amtText = doc.getElementById('display-amount-text');
+                        if (amtText && amtText.innerText.trim() !== '') {
+                            amtWrapper.style.display = 'flex';
+                            amtText.style.color = '#1e3a8a';
+                        }
+                    }
+                });
+
+                const margin = 20;
+                const outCanvas = document.createElement('canvas');
+                outCanvas.width = canvas.width + (margin * 2);
+                outCanvas.height = canvas.height + (margin * 2);
+                const ctx = outCanvas.getContext('2d');
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+                ctx.drawImage(canvas, margin, margin);
+
+                const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+                const fileExt = format === 'jpg' ? '.jpg' : '.png';
+                const fileName = `PromptPay_${Date.now()}${fileExt}`;
+
+                outCanvas.toBlob(async (blob) => {
+                    if (!blob) return;
+
+                    const ua = navigator.userAgent || navigator.vendor || window.opera;
+                    const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+                    const isInAppBrowser = /FBAN|FBAV|Line|MicroMessenger|Viber|Instagram|Snapchat/i.test(ua);
+
+                    if (isInAppBrowser) {
+                        const url = URL.createObjectURL(blob);
+                        window.open(url, '_blank');
+                    } else if (isIOS && navigator.canShare) {
+                        const file = new File([blob], fileName, { type: mimeType });
+                        try {
+                            await navigator.share({ files: [file] });
+                        } catch(e) {}
+                    } else {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+                    }
+                    
+                    btnEl.innerHTML = '✅ ရပါပြီ';
+                    setTimeout(() => {
+                        btnEl.innerHTML = originalText;
+                        btnEl.disabled = false;
+                    }, 2000);
+                }, mimeType, 0.95);
+
+            } catch (error) {
+                alert('ပုံသိမ်းဆည်းရာတွင် အခက်အခဲရှိပါသည်။');
+                btnEl.innerHTML = originalText;
+                btnEl.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
