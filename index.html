@@ -9,6 +9,7 @@
     
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
@@ -92,6 +93,40 @@
 </head>
 <body class="p-4 md:p-8 flex flex-col items-center min-h-screen">
 
+    <button id="login-corner-btn" onclick="openLoginModal()" class="fixed top-3 right-3 z-40 bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-full shadow-md hover:bg-slate-700">
+        🔐 Login
+    </button>
+
+    <div id="login-modal" class="hidden fixed inset-0 z-50 bg-black/40 items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 relative">
+            <button onclick="closeLoginModal()" class="absolute top-3 right-4 text-2xl text-slate-400 hover:text-slate-700">×</button>
+            <h2 class="font-bold text-slate-800 text-lg mb-4">🔐 Admin Login</h2>
+            <div id="login-area">
+                <input type="email" id="admin-email" class="input-box mb-3" placeholder="Admin Email">
+                <input type="password" id="admin-password" class="input-box mb-3" placeholder="Password">
+                <button id="btn-login" onclick="adminLogin()" class="btn-primary">Login ဝင်မည်</button>
+            </div>
+            <div id="logged-in-area" class="hidden">
+                <p id="logged-in-email" class="text-sm font-bold text-green-600 break-all mb-3"></p>
+                <hr class="my-3 border-slate-200">
+                <p class="text-sm font-bold text-purple-700 mb-2">💾 PromptPay အကောင့် Save မည်</p>
+                <label class="block text-xs font-bold text-slate-600 mb-1">📂 ဖျက်ရန် အကောင့်ရွေးပါ</label>
+                <select id="admin-account-select" class="select-box bg-purple-50 border-purple-200 mb-3">
+                    <option value="">-- Save ထားသော အကောင့်ရွေးပါ --</option>
+                </select>
+                <input type="text" id="save-phone" class="input-box mb-3" placeholder="PromptPay ဖုန်းနံပါတ် / ID">
+                <input type="text" id="save-name" class="input-box mb-3" placeholder="အကောင့်နာမည်">
+                <button id="btn-save-account" onclick="saveAccount()" class="btn-primary">💾 အကောင့် Save မည်</button>
+                <p class="text-xs text-slate-500 mt-2">ဖုန်းနံပါတ်တူပြီးသားရှိပါက အချက်အလက်ကို update လုပ်ပါမည်။</p>
+                <button id="btn-delete-account" onclick="deleteSelectedAccount()" class="w-full mt-3 bg-red-50 text-red-600 border-2 border-red-200 font-bold py-2 rounded-xl hover:bg-red-100">🗑️ ရွေးထားသောအကောင့် ဖျက်မည်</button>
+                <p class="text-xs text-slate-500 mt-2">အောက်က “Save ထားသော အကောင့်များ” မှ ဖျက်လိုသောအကောင့်ကို အရင်ရွေးပါ။</p>
+                <hr class="my-3 border-slate-200">
+                <button onclick="adminLogout()" class="btn-secondary w-full">Logout</button>
+            </div>
+            <p id="auth-status" class="text-xs text-slate-500 mt-3">အကောင့် Save လုပ်ရန် Admin Login ဝင်ပါ။</p>
+        </div>
+    </div>
+
     <div class="w-full max-w-md">
         <div class="text-center mb-6">
             <h1 class="text-2xl font-black text-slate-800">PromptPay QR ထုတ်ရန်</h1>
@@ -167,19 +202,21 @@
 
     <script>
         // Firebase Configuration
-        const firebaseConfig = { 
-            apiKey: "AIzaSyDr4ada9hQah9C2ZX0xFBfxYDdXUQl3oa4", 
-            authDomain: "excal-570ed.firebaseapp.com", 
-            projectId: "excal-570ed", 
-            storageBucket: "excal-570ed.firebasestorage.app", 
-            messagingSenderId: "84544400626", 
-            appId: "1:84544400626:web:3393a4e339d3f41a60f46b", 
-            measurementId: "G-4KLYMEPPGT" 
+        const firebaseConfig = {
+            apiKey: "AIzaSyC1ApZQYPm0H8pPbGq_58ceAfsJdLlzw80",
+            authDomain: "ppqr-mm.firebaseapp.com",
+            projectId: "ppqr-mm",
+            storageBucket: "ppqr-mm.firebasestorage.app",
+            messagingSenderId: "68224014534",
+            appId: "1:68224014534:web:7dab73608a62bc1dd85fc7",
+            measurementId: "G-08ZHZT9560"
         };
         firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
 
         // Local HTML file ကနေဖွင့်ရင် Connection ပြတ်မသွားအောင် ထည့်ပေးထားခြင်း
-        firebase.firestore().settings({ experimentalForceLongPolling: true });
+        db.settings({ experimentalForceLongPolling: true });
 
         let FIREBASE_QRS = [];
         let isDbLoaded = false;
@@ -194,7 +231,7 @@
         }, 3000);
 
         // Load Data from Firebase
-        const dbRef = firebase.firestore().collection("exchange_app").doc("admin_data");
+        const dbRef = db.collection("exchange_app").doc("admin_data");
         dbRef.get().then((docSnap) => {
             isDbLoaded = true;
             if (docSnap.exists) {
@@ -219,9 +256,193 @@
             statusEl.classList.add('text-red-500');
         });
 
+        auth.onAuthStateChanged((user) => {
+            const loginArea = document.getElementById('login-area');
+            const loggedInArea = document.getElementById('logged-in-area');
+            const loginBtn = document.getElementById('btn-save-account');
+            const authStatus = document.getElementById('auth-status');
+
+            if (user && user.email) {
+                loginArea.classList.add('hidden');
+                loggedInArea.classList.remove('hidden');
+                document.getElementById('logged-in-email').textContent = `✅ ${user.email}`;
+                const cornerBtn = document.getElementById('login-corner-btn');
+                cornerBtn.textContent = '✅ Admin';
+                cornerBtn.classList.remove('bg-slate-800');
+                cornerBtn.classList.add('bg-green-600');
+                loginBtn.disabled = false;
+                loginBtn.textContent = '💾 အကောင့် Save မည်';
+                authStatus.textContent = 'Admin အဖြစ် Login ဝင်ထားပါသည်။';
+                authStatus.className = 'text-xs text-green-600 mt-2';
+                closeLoginModal();
+            } else {
+                loginArea.classList.remove('hidden');
+                loggedInArea.classList.add('hidden');
+                const cornerBtn = document.getElementById('login-corner-btn');
+                cornerBtn.textContent = '🔐 Login';
+                cornerBtn.classList.remove('bg-green-600');
+                cornerBtn.classList.add('bg-slate-800');
+                loginBtn.disabled = true;
+                loginBtn.textContent = '🔒 Admin Login လိုသည်';
+                authStatus.textContent = 'အကောင့် Save လုပ်ရန် Admin Login ဝင်ပါ။';
+                authStatus.className = 'text-xs text-slate-500 mt-2';
+            }
+        });
+
+        function openLoginModal() {
+            const modal = document.getElementById('login-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeLoginModal() {
+            const modal = document.getElementById('login-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function adminLogin() {
+            const email = document.getElementById('admin-email').value.trim();
+            const password = document.getElementById('admin-password').value;
+            const loginBtn = document.getElementById('btn-login');
+
+            if (!email || !password) {
+                alert('Admin Email နဲ့ Password နှစ်ခုလုံးထည့်ပါ။');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'ဝင်နေသည်...';
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                document.getElementById('admin-password').value = '';
+            } catch (error) {
+                console.error(error);
+                const messages = {
+                    'auth/invalid-credential': 'Email သို့မဟုတ် Password မှားနေပါသည်။',
+                    'auth/user-not-found': 'ဒီ Admin Email မရှိသေးပါ။',
+                    'auth/wrong-password': 'Password မှားနေပါသည်။',
+                    'auth/too-many-requests': 'ခဏစောင့်ပြီးမှ ပြန်ကြိုးစားပါ။'
+                };
+                alert('❌ ' + (messages[error.code] || 'Login မအောင်မြင်ပါ။ Firebase Authentication ကိုစစ်ပါ။'));
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login ဝင်မည်';
+            }
+        }
+
+        function adminLogout() {
+            auth.signOut();
+        }
+
+        async function saveAccount() {
+            const phone = document.getElementById('save-phone').value.trim();
+            const name = document.getElementById('save-name').value.trim();
+            const saveBtn = document.getElementById('btn-save-account');
+
+            if (!phone) {
+                alert('Save မလုပ်ခင် PromptPay ဖုန်းနံပါတ် သို့မဟုတ် ID ထည့်ပေးပါ။');
+                return;
+            }
+
+            if (!/^\d{8,15}$/.test(phone)) {
+                alert('ဖုန်းနံပါတ်/ID ကို ဂဏန်း ၈ လုံးမှ ၁၅ လုံးအတွင်း ထည့်ပေးပါ။');
+                return;
+            }
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = '⏳ Save လုပ်နေသည်...';
+
+            try {
+                if (!auth.currentUser || !auth.currentUser.email) {
+                    throw new Error('Admin login required');
+                }
+                await auth.currentUser.getIdToken(true);
+                const snapshot = await dbRef.get();
+                const existingData = snapshot.exists ? snapshot.data() : {};
+                const accounts = Array.isArray(existingData.qrs) ? existingData.qrs : [];
+                const newAccount = {
+                    file: `PP:${phone}`,
+                    name: name || 'PromptPay Account',
+                    owner: name || ''
+                };
+
+                const index = accounts.findIndex(item => {
+                    const file = typeof item === 'string' ? item : item?.file;
+                    return file === `PP:${phone}`;
+                });
+
+                if (index >= 0) {
+                    accounts[index] = newAccount;
+                } else {
+                    accounts.push(newAccount);
+                }
+
+                await dbRef.set({ qrs: accounts }, { merge: true });
+                FIREBASE_QRS = accounts;
+                populateDropdown();
+                document.getElementById('save-phone').value = '';
+                document.getElementById('save-name').value = '';
+                alert(index >= 0 ? '✅ အကောင့်အချက်အလက် ပြင်ပြီးပါပြီ။' : '✅ အကောင့် Save ပြီးပါပြီ။');
+            } catch (error) {
+                console.error(error);
+                alert('❌ Save မလုပ်နိုင်ပါ။ Firebase Authentication နှင့် Firestore Rules ကို စစ်ဆေးပါ။');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '💾 အကောင့် Save မည်';
+            }
+        }
+
+        async function deleteSelectedAccount() {
+            const select = document.getElementById('admin-account-select');
+            const deleteBtn = document.getElementById('btn-delete-account');
+
+            if (!auth.currentUser || !auth.currentUser.email) {
+                alert('ဖျက်ရန် Admin Login ဝင်ထားရပါမယ်။');
+                return;
+            }
+
+            if (!select.value) {
+                alert('ဖျက်လိုသောအကောင့်ကို အောက်ကစာရင်းထဲမှ အရင်ရွေးပါ။');
+                return;
+            }
+
+            const selected = JSON.parse(select.value);
+            if (!confirm(`${selected.phone} အကောင့်ကို တကယ်ဖျက်မလား?`)) return;
+
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = '⏳ ဖျက်နေသည်...';
+
+            try {
+                await auth.currentUser.getIdToken(true);
+                const snapshot = await dbRef.get();
+                const data = snapshot.exists ? snapshot.data() : {};
+                const accounts = Array.isArray(data.qrs) ? data.qrs : [];
+                const filtered = accounts.filter(item => {
+                    const file = typeof item === 'string' ? item : item?.file;
+                    return file !== `PP:${selected.phone}`;
+                });
+
+                await dbRef.set({ qrs: filtered }, { merge: true });
+                FIREBASE_QRS = filtered;
+                populateDropdown();
+                document.getElementById('save-phone').value = '';
+                document.getElementById('save-name').value = '';
+                alert('✅ အကောင့်ဖျက်ပြီးပါပြီ။');
+            } catch (error) {
+                console.error(error);
+                alert('❌ အကောင့်ဖျက်မရပါ။ Firestore Rules ကို စစ်ဆေးပါ။');
+            } finally {
+                deleteBtn.disabled = false;
+                deleteBtn.textContent = '🗑️ ရွေးထားသောအကောင့် ဖျက်မည်';
+            }
+        }
+
         function populateDropdown() {
             const select = document.getElementById('pp-select');
+            const adminSelect = document.getElementById('admin-account-select');
             select.innerHTML = '<option value="">-- Save ထားသော အကောင့်ရွေးပါ --</option>';
+            adminSelect.innerHTML = '<option value="">-- Save ထားသော အကောင့်ရွေးပါ --</option>';
             
             FIREBASE_QRS.forEach(qr => {
                 const file = typeof qr === 'string' ? qr : qr.file;
@@ -232,12 +453,20 @@
                     const phone = file.split(':')[1];
                     const option = document.createElement('option');
                     option.value = JSON.stringify({ phone: phone, name: owner || name });
-                    let displayName = owner ? `${name} (${owner})` : name;
-                    option.textContent = displayName;
+                    let displayName = owner && owner !== name ? `${name} (${owner})` : name;
+                    option.textContent = `${phone} - ${displayName}`;
                     select.appendChild(option);
+                    adminSelect.appendChild(option.cloneNode(true));
                 }
             });
         }
+
+        document.getElementById('admin-account-select').addEventListener('change', function() {
+            if (!this.value) return;
+            const data = JSON.parse(this.value);
+            document.getElementById('save-phone').value = data.phone;
+            document.getElementById('save-name').value = data.name;
+        });
 
         document.getElementById('pp-select').addEventListener('change', function() {
             if(!this.value) {
