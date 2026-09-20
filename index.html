@@ -6,8 +6,6 @@
     <title>PromptPay QR Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    
-    <!-- ပိုမိုမြန်ဆန်တည်ငြိမ်သော QR Library အသစ်သို့ ပြောင်းထားပါသည် -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
@@ -60,7 +58,6 @@
         .btn-secondary:hover { background: #f8fafc; border-color: #94a3b8; }
         .btn-secondary:active { transform: scale(0.98); }
         
-        /* QR Slip Styling */
         .slip-container {
             background: #ffffff;
             border-radius: 20px;
@@ -113,16 +110,16 @@
                 <p id="logged-in-email" class="text-sm font-bold text-green-600 break-all mb-3"></p>
                 <hr class="my-3 border-slate-200">
                 <p class="text-sm font-bold text-purple-700 mb-2">💾 PromptPay အကောင့် Save မည်</p>
-                <label class="block text-xs font-bold text-slate-600 mb-1">📂 ဖျက်ရန် အကောင့်ရွေးပါ</label>
+                <label class="block text-xs font-bold text-slate-600 mb-1">📂 ဖျက်ရန် သို့မဟုတ် ပြင်ရန် အကောင့်ရွေးပါ</label>
                 <select id="admin-account-select" class="select-box bg-purple-50 border-purple-200 mb-3">
                     <option value="">-- Save ထားသော အကောင့်ရွေးပါ --</option>
                 </select>
                 <input type="text" id="save-phone" class="input-box mb-3" placeholder="PromptPay ဖုန်းနံပါတ် / ID">
                 <input type="text" id="save-name" class="input-box mb-3" placeholder="အကောင့်နာမည်">
+                <input type="text" id="save-note" class="input-box mb-3" placeholder="ဘဏ် / မှတ်စု (Option)">
                 <button id="btn-save-account" onclick="saveAccount()" class="btn-primary">💾 အကောင့် Save မည်</button>
                 <p class="text-xs text-slate-500 mt-2">ဖုန်းနံပါတ်တူပြီးသားရှိပါက အချက်အလက်ကို update လုပ်ပါမည်။</p>
                 <button id="btn-delete-account" onclick="deleteSelectedAccount()" class="w-full mt-3 bg-red-50 text-red-600 border-2 border-red-200 font-bold py-2 rounded-xl hover:bg-red-100">🗑️ ရွေးထားသောအကောင့် ဖျက်မည်</button>
-                <p class="text-xs text-slate-500 mt-2">အောက်က “Save ထားသော အကောင့်များ” မှ ဖျက်လိုသောအကောင့်ကို အရင်ရွေးပါ။</p>
                 <hr class="my-3 border-slate-200">
                 <button onclick="adminLogout()" class="btn-secondary w-full">Logout</button>
             </div>
@@ -154,6 +151,10 @@
                 <label class="block text-sm font-bold text-slate-700 mb-1">👤 အကောင့်နာမည် (Option)</label>
                 <input type="text" id="pp-name" class="input-box" placeholder="ဥပမာ - YE LYNN HTUN">
             </div>
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-slate-700 mb-1">🏦 ဘဏ် / မှတ်စု (Option)</label>
+                <input type="text" id="pp-note" class="input-box" placeholder="ဥပမာ - TrueMoney, K PLUS, SCB">
+            </div>
             <div class="mb-5">
                 <label class="block text-sm font-bold text-slate-700 mb-1">💰 ပမာဏ (THB)</label>
                 <input type="text" id="pp-amount" class="input-box text-xl" placeholder="ဥပမာ - 1,500" inputmode="decimal">
@@ -173,6 +174,9 @@
                     </div>
 
                     <div class="qr-frame relative z-10">
+                        <!-- မှတ်စု (Bank Note) ကို QR ပုံရဲ့ အပေါ်ထောင့်စွန်းမှာ တင်ထားပါသည် -->
+                        <span id="display-note" class="absolute -top-3 -right-3 bg-slate-600 text-white text-[10px] font-bold px-2 py-1 rounded-md hidden shadow-sm border-2 border-white z-20 uppercase"></span>
+                        
                         <img id="qr-image" src="" alt="QR Code" class="w-48 h-48 object-contain">
                     </div>
                     
@@ -204,7 +208,6 @@
     </div>
 
     <script>
-        // Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyC1ApZQYPm0H8pPbGq_58ceAfsJdLlzw80",
             authDomain: "ppqr-mm.firebaseapp.com",
@@ -332,6 +335,7 @@
         async function saveAccount() {
             const phone = document.getElementById('save-phone').value.trim();
             const name = document.getElementById('save-name').value.trim();
+            const note = document.getElementById('save-note').value.trim();
             const saveBtn = document.getElementById('btn-save-account');
 
             if (!phone) {
@@ -355,10 +359,12 @@
                 const snapshot = await dbRef.get();
                 const existingData = snapshot.exists ? snapshot.data() : {};
                 const accounts = Array.isArray(existingData.qrs) ? existingData.qrs : [];
+                
                 const newAccount = {
                     file: `PP:${phone}`,
                     name: name || 'PromptPay Account',
-                    owner: name || ''
+                    owner: name || '',
+                    note: note || ''
                 };
 
                 const index = accounts.findIndex(item => {
@@ -377,6 +383,7 @@
                 populateDropdown();
                 document.getElementById('save-phone').value = '';
                 document.getElementById('save-name').value = '';
+                document.getElementById('save-note').value = '';
                 alert(index >= 0 ? '✅ အကောင့်အချက်အလက် ပြင်ပြီးပါပြီ။' : '✅ အကောင့် Save ပြီးပါပြီ။');
             } catch (error) {
                 console.error(error);
@@ -422,6 +429,7 @@
                 populateDropdown();
                 document.getElementById('save-phone').value = '';
                 document.getElementById('save-name').value = '';
+                document.getElementById('save-note').value = '';
                 alert('✅ အကောင့်ဖျက်ပြီးပါပြီ။');
             } catch (error) {
                 console.error(error);
@@ -442,11 +450,12 @@
                 const file = typeof qr === 'string' ? qr : qr.file;
                 const name = typeof qr === 'string' ? qr.replace(/\.[^.]+$/, '') : (qr.name || file);
                 const owner = (typeof qr === 'object' && qr.owner) ? qr.owner : '';
+                const note = (typeof qr === 'object' && qr.note) ? qr.note : '';
                 
                 if (file.startsWith('PP:')) {
                     const phone = file.split(':')[1];
                     const option = document.createElement('option');
-                    option.value = JSON.stringify({ phone: phone, name: owner || name });
+                    option.value = JSON.stringify({ phone: phone, name: owner || name, note: note });
                     let displayName = owner && owner !== name ? `${name} (${owner})` : name;
                     option.textContent = `${phone} - ${displayName}`;
                     select.appendChild(option);
@@ -456,21 +465,29 @@
         }
 
         document.getElementById('admin-account-select').addEventListener('change', function() {
-            if (!this.value) return;
+            if (!this.value) {
+                document.getElementById('save-phone').value = '';
+                document.getElementById('save-name').value = '';
+                document.getElementById('save-note').value = '';
+                return;
+            }
             const data = JSON.parse(this.value);
-            document.getElementById('save-phone').value = data.phone;
-            document.getElementById('save-name').value = data.name;
+            document.getElementById('save-phone').value = data.phone || '';
+            document.getElementById('save-name').value = data.name || '';
+            document.getElementById('save-note').value = data.note || '';
         });
 
         document.getElementById('pp-select').addEventListener('change', function() {
             if(!this.value) {
                 document.getElementById('pp-id').value = '';
                 document.getElementById('pp-name').value = '';
+                document.getElementById('pp-note').value = '';
                 return;
             }
             const data = JSON.parse(this.value);
-            document.getElementById('pp-id').value = data.phone;
-            document.getElementById('pp-name').value = data.name;
+            document.getElementById('pp-id').value = data.phone || '';
+            document.getElementById('pp-name').value = data.name || '';
+            document.getElementById('pp-note').value = data.note || ''; 
         });
 
         const amtInput = document.getElementById('pp-amount');
@@ -535,6 +552,7 @@
         function generateQR() {
             const ppId = document.getElementById('pp-id').value.trim();
             const ppName = document.getElementById('pp-name').value.trim();
+            const ppNote = document.getElementById('pp-note').value.trim();
             const rawAmt = document.getElementById('pp-amount').value.replace(/,/g, '');
             
             if (!ppId) {
@@ -555,6 +573,18 @@
             const amtNum = parseFloat(rawAmt) || 0;
             document.getElementById('display-name').innerHTML = ppName || 'PROMPTPAY ACCOUNT';
             
+            // Note နေရာသစ်
+            const noteEl = document.getElementById('display-note');
+            if (ppNote) {
+                noteEl.innerText = ppNote;
+                noteEl.classList.remove('hidden');
+                noteEl.style.display = 'block'; // Ensure visibility
+            } else {
+                noteEl.innerText = '';
+                noteEl.classList.add('hidden');
+                noteEl.style.display = 'none';
+            }
+            
             const amtWrapper = document.getElementById('amt-box-wrapper');
             const amtText = document.getElementById('display-amount-text');
             
@@ -569,7 +599,6 @@
             }
 
             try {
-                // QRious Library ဖြင့် QR ကို Local တွင် တိုက်ရိုက်ထုတ်ခြင်း
                 const payload = generatePromptPayPayload(ppId, amtNum);
                 const qr = new QRious({
                     value: payload,
@@ -614,6 +643,12 @@
                         if (amtText && amtText.innerText.trim() !== '') {
                             amtWrapper.style.display = 'flex';
                             amtText.style.color = '#1e3a8a';
+                        }
+                        
+                        const noteEl = doc.getElementById('display-note');
+                        if (noteEl && noteEl.innerText.trim() !== '') {
+                            noteEl.style.display = 'block';
+                            noteEl.classList.remove('hidden');
                         }
                     }
                 });
