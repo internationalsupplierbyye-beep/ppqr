@@ -7,6 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     
+    <!-- ပိုမိုမြန်ဆန်တည်ငြိမ်သော QR Library အသစ်သို့ ပြောင်းထားပါသည် -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
@@ -145,7 +148,7 @@
 
             <div class="mb-4">
                 <label class="block text-sm font-bold text-slate-700 mb-1">📱 PromptPay No. (ဖုန်း / ID)</label>
-                <input type="text" id="pp-id" class="input-box" placeholder="0812345678">
+                <input type="text" id="pp-id" class="input-box" placeholder="ဥပမာ - 140001234567890">
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-bold text-slate-700 mb-1">👤 အကောင့်နာမည် (Option)</label>
@@ -215,22 +218,19 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        // Local HTML file ကနေဖွင့်ရင် Connection ပြတ်မသွားအောင် ထည့်ပေးထားခြင်း
         db.settings({ experimentalForceLongPolling: true });
 
         let FIREBASE_QRS = [];
         let isDbLoaded = false;
 
-        // ၃ စက္ကန့်အတွင်း DB မချိတ်နိုင်ရင် စောင့်စရာမလိုဘဲ ရိုက်ထည့်လို့ရကြောင်း ပြပေးမည်
         setTimeout(() => {
             if(!isDbLoaded) {
                 const statusEl = document.getElementById('db-status');
-                statusEl.textContent = '⚠️ အင်တာနက် သို့မဟုတ် Local File ကြောင့် နှေးနေပါသည် (အောက်တွင် ကိုယ်တိုင်ရိုက်ထည့်၍ ဆက်သုံးနိုင်ပါသည်)';
+                statusEl.textContent = '⚠️ အင်တာနက် သို့မဟုတ် Local File ကြောင့် နှေးနေပါသည်';
                 statusEl.classList.replace('text-blue-500', 'text-orange-500');
             }
         }, 3000);
 
-        // Load Data from Firebase
         const dbRef = db.collection("exchange_app").doc("admin_data");
         dbRef.get().then((docSnap) => {
             isDbLoaded = true;
@@ -318,13 +318,7 @@
                 document.getElementById('admin-password').value = '';
             } catch (error) {
                 console.error(error);
-                const messages = {
-                    'auth/invalid-credential': 'Email သို့မဟုတ် Password မှားနေပါသည်။',
-                    'auth/user-not-found': 'ဒီ Admin Email မရှိသေးပါ။',
-                    'auth/wrong-password': 'Password မှားနေပါသည်။',
-                    'auth/too-many-requests': 'ခဏစောင့်ပြီးမှ ပြန်ကြိုးစားပါ။'
-                };
-                alert('❌ ' + (messages[error.code] || 'Login မအောင်မြင်ပါ။ Firebase Authentication ကိုစစ်ပါ။'));
+                alert('❌ Login မအောင်မြင်ပါ။');
             } finally {
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Login ဝင်မည်';
@@ -386,7 +380,7 @@
                 alert(index >= 0 ? '✅ အကောင့်အချက်အလက် ပြင်ပြီးပါပြီ။' : '✅ အကောင့် Save ပြီးပါပြီ။');
             } catch (error) {
                 console.error(error);
-                alert('❌ Save မလုပ်နိုင်ပါ။ Firebase Authentication နှင့် Firestore Rules ကို စစ်ဆေးပါ။');
+                alert('❌ Save မလုပ်နိုင်ပါ။');
             } finally {
                 saveBtn.disabled = false;
                 saveBtn.textContent = '💾 အကောင့် Save မည်';
@@ -431,7 +425,7 @@
                 alert('✅ အကောင့်ဖျက်ပြီးပါပြီ။');
             } catch (error) {
                 console.error(error);
-                alert('❌ အကောင့်ဖျက်မရပါ။ Firestore Rules ကို စစ်ဆေးပါ။');
+                alert('❌ အကောင့်ဖျက်မရပါ။');
             } finally {
                 deleteBtn.disabled = false;
                 deleteBtn.textContent = '🗑️ ရွေးထားသောအကောင့် ဖျက်မည်';
@@ -496,7 +490,49 @@
             }
         });
 
-        async function generateQR() {
+        function generatePromptPayPayload(id, amount) {
+            let cleanId = id.replace(/[^0-9]/g, '');
+            let target = "";
+            
+            if (cleanId.length >= 15) {
+                target = "03" + String(cleanId.length).padStart(2, '0') + cleanId;
+            } else if (cleanId.length === 13) {
+                target = "0213" + cleanId; 
+            } else if (cleanId.length === 10) {
+                target = "01130066" + cleanId.substring(1);
+            } else {
+                target = "03" + String(cleanId.length).padStart(2, '0') + cleanId;
+            }
+            
+            let tag29 = "0016A000000677010111" + target;
+            let payload = "00020101021" + (amount > 0 ? "2" : "1") + 
+                          "29" + String(tag29.length).padStart(2, '0') + tag29 + 
+                          "5802TH5303764";
+                          
+            if (amount > 0) {
+                let amtStr = parseFloat(amount).toFixed(2);
+                payload += "54" + String(amtStr.length).padStart(2, '0') + amtStr;
+            }
+            
+            payload += "6304";
+            
+            let crc = 0xFFFF;
+            for (let i = 0; i < payload.length; i++) {
+                crc ^= (payload.charCodeAt(i) << 8);
+                for (let j = 0; j < 8; j++) {
+                    if (crc & 0x8000) {
+                        crc = ((crc << 1) ^ 0x1021);
+                    } else {
+                        crc = (crc << 1);
+                    }
+                    crc &= 0xFFFF;
+                }
+            }
+            let crcHex = crc.toString(16).toUpperCase().padStart(4, '0');
+            return payload + crcHex;
+        }
+
+        function generateQR() {
             const ppId = document.getElementById('pp-id').value.trim();
             const ppName = document.getElementById('pp-name').value.trim();
             const rawAmt = document.getElementById('pp-amount').value.replace(/,/g, '');
@@ -506,14 +542,17 @@
                 return;
             }
 
+            if (typeof QRious === 'undefined') {
+                alert('အင်တာနက်ချိတ်ဆက်မှု မကောင်းသဖြင့် စနစ်ကို Load လုပ်၍မရသေးပါ။ စက္ကန့်အနည်းငယ်စောင့်၍ ပြန်နှိပ်ပါ။');
+                return;
+            }
+
             const btn = document.getElementById('btn-generate');
             const originalText = btn.textContent;
             btn.textContent = 'ထုတ်လုပ်နေသည်...';
             btn.disabled = true;
 
-            const amtNum = parseFloat(rawAmt);
-            const qrUrl = (amtNum > 0) ? `https://promptpay.io/${ppId}/${amtNum}.png` : `https://promptpay.io/${ppId}.png`;
-
+            const amtNum = parseFloat(rawAmt) || 0;
             document.getElementById('display-name').innerHTML = ppName || 'PROMPTPAY ACCOUNT';
             
             const amtWrapper = document.getElementById('amt-box-wrapper');
@@ -530,13 +569,16 @@
             }
 
             try {
-                const proxyUrl = "https://wsrv.nl/?url=" + encodeURIComponent(qrUrl);
-                const response = await fetch(proxyUrl);
-                const blob = await response.blob();
-                const localUrl = URL.createObjectURL(blob);
+                // QRious Library ဖြင့် QR ကို Local တွင် တိုက်ရိုက်ထုတ်ခြင်း
+                const payload = generatePromptPayPayload(ppId, amtNum);
+                const qr = new QRious({
+                    value: payload,
+                    size: 400,
+                    level: 'H'
+                });
                 
                 const qrImg = document.getElementById('qr-image');
-                qrImg.src = localUrl;
+                qrImg.src = qr.toDataURL('image/png');
                 
                 qrImg.onload = () => {
                     document.getElementById('result-area').classList.remove('hidden');
@@ -544,7 +586,8 @@
                     btn.disabled = false;
                 };
             } catch (error) {
-                alert('QR ထုတ်ရာတွင် အခက်အခဲရှိပါသည်။ အင်တာနက်ချိတ်ဆက်မှုကို စစ်ဆေးပါ။');
+                console.error(error);
+                alert('Error ဖြစ်နေပါသည်။ ' + error.message);
                 btn.textContent = originalText;
                 btn.disabled = false;
             }
